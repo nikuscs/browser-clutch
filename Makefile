@@ -10,13 +10,12 @@ build:
 	@echo "Building..."
 	@xcodebuild -project $(APP_NAME).xcodeproj -scheme $(APP_NAME) -configuration Debug build 2>&1 | tail -5
 
-# Install to /Applications and register
+# Install to /Applications
 install: build
 	@echo "Installing..."
 	@pkill $(APP_NAME) 2>/dev/null || true
-	@sleep 1
+	@sleep 0.5
 	@cp -R $(BUILD_DIR)/$(APP_NAME).app $(INSTALL_DIR)/
-	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f $(INSTALL_DIR)/$(APP_NAME).app
 	@echo "Installed to $(INSTALL_DIR)/$(APP_NAME).app"
 
 # Run the app

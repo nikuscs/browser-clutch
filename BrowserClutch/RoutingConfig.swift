@@ -3,6 +3,11 @@ import Foundation
 struct RoutingConfig: Codable {
     let defaultBrowser: String
     let rules: [Rule]
+
+    init(defaultBrowser: String, rules: [Rule]) {
+        self.defaultBrowser = defaultBrowser
+        self.rules = rules
+    }
 }
 
 struct Rule: Codable {
@@ -11,6 +16,14 @@ struct Rule: Codable {
     let source: SourceMatch?
     let domain: DomainMatch?
     let browser: String
+
+    init(id: String, priority: Int, source: SourceMatch?, domain: DomainMatch?, browser: String) {
+        self.id = id
+        self.priority = priority
+        self.source = source
+        self.domain = domain
+        self.browser = browser
+    }
 }
 
 struct SourceMatch: Codable {
@@ -25,6 +38,12 @@ struct SourceMatch: Codable {
         case name
         case bundleId = "bundle_id"
         case pattern
+    }
+
+    init(name: String? = nil, bundleId: String? = nil, pattern: String? = nil) {
+        self.name = name
+        self.bundleId = bundleId
+        self.pattern = pattern
     }
 
     func matches(appName: String, bundleId appBundleId: String) -> Bool {
@@ -53,6 +72,12 @@ struct DomainMatch: Codable {
     let exact: String?
     let pattern: String?
     let contains: String?
+
+    init(exact: String? = nil, pattern: String? = nil, contains: String? = nil) {
+        self.exact = exact
+        self.pattern = pattern
+        self.contains = contains
+    }
 
     func matches(url: URL) -> Bool {
         guard let host = url.host else { return false }

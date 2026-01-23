@@ -5,13 +5,13 @@ struct BrowserClutchApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("BrowserClutch", systemImage: "arrow.triangle.branch") {
+        MenuBarExtra("BrowserClutch", image: "MenuBarIcon") {
             MenuBarView()
         }
         .menuBarExtraStyle(.menu)
 
         Settings {
-            ConfigEditorView()
+            SettingsView()
         }
     }
 }
@@ -141,119 +141,3 @@ enum BrowserDetector {
     }
 }
 
-struct ConfigEditorView: View {
-    @State private var configText: String = ""
-    @State private var statusMessage: String = ""
-    @State private var isError: Bool = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Config")
-                    .font(.headline)
-                Spacer()
-                Button {
-                    NSWorkspace.shared.open(ConfigManager.shared.configDirectoryURL)
-                } label: {
-                    Image(systemName: "folder")
-                }
-                .buttonStyle(.borderless)
-                .help("Open config folder")
-            }
-
-            TextEditor(text: $configText)
-                .font(.system(.body, design: .monospaced))
-                .frame(minWidth: 500, minHeight: 350)
-
-            HStack {
-                Text(statusMessage)
-                    .foregroundColor(isError ? .red : .green)
-                    .font(.caption)
-                    .lineLimit(1)
-
-                Spacer()
-
-                Button("Reload") {
-                    loadConfig()
-                }
-                .keyboardShortcut("r", modifiers: .command)
-
-                Button("Save") {
-                    saveConfig()
-                }
-                .keyboardShortcut("s", modifiers: .command)
-            }
-        }
-        .padding()
-        .frame(width: 600, height: 450)
-        .onAppear {
-            loadConfig()
-        }
-    }
-
-    private func loadConfig() {
-        let configURL = ConfigManager.shared.configFileURL
-
-        if FileManager.default.fileExists(atPath: configURL.path) {
-            do {
-                configText = try String(contentsOf: configURL, encoding: .utf8)
-                statusMessage = "Loaded from: \(configURL.path)"
-                isError = false
-            } catch {
-                configText = defaultConfigTemplate()
-                statusMessage = "Error loading: \(error.localizedDescription)"
-                isError = true
-            }
-        } else {
-            configText = defaultConfigTemplate()
-            statusMessage = "No config file yet - showing template"
-            isError = false
-        }
-    }
-
-    private func saveConfig() {
-        guard let data = configText.data(using: .utf8) else {
-            statusMessage = "Error: Invalid text encoding"
-            isError = true
-            return
-        }
-
-        // Validate JSON
-        do {
-            _ = try JSONDecoder().decode(RoutingConfig.self, from: data)
-        } catch {
-            statusMessage = "Invalid JSON: \(error.localizedDescription)"
-            isError = true
-            return
-        }
-
-        // Save
-        do {
-            ConfigManager.shared.ensureConfigDirectoryExists()
-            try configText.write(to: ConfigManager.shared.configFileURL, atomically: true, encoding: .utf8)
-            statusMessage = "Saved!"
-            isError = false
-        } catch {
-            statusMessage = "Error saving: \(error.localizedDescription)"
-            isError = true
-        }
-    }
-
-    private func defaultConfigTemplate() -> String {
-        """
-        {
-          "defaultBrowser": "com.apple.Safari",
-          "rules": [
-            {
-              "id": "example-rule",
-              "priority": 100,
-              "source": {
-                "name": "Slack"
-              },
-              "browser": "com.google.Chrome"
-            }
-          ]
-        }
-        """
-    }
-}

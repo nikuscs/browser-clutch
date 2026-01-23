@@ -3,6 +3,7 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastSourceApp: (name: String, bundleId: String)?
     private var appObserver: NSObjectProtocol?
+    private var configObserver: NSObjectProtocol?
     private var cachedConfig: RoutingConfig?
     private var ruleEngine: RuleEngine?
 
@@ -15,6 +16,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         reloadConfig()
         startTrackingActiveApp()
         registerURLHandler()
+        observeConfigChanges()
+    }
+
+    private func observeConfigChanges() {
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .configDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.log.info("Config changed, reloading...")
+            self?.reloadConfig()
+        }
     }
 
     // MARK: - Config
