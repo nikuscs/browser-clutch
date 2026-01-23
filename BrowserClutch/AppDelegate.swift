@@ -4,10 +4,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastSourceApp: (name: String, bundleId: String)?
     private var appObserver: NSObjectProtocol?
     private var configObserver: NSObjectProtocol?
+    private var menuBarObserver: NSObjectProtocol?
     private var cachedConfig: RoutingConfig?
     private var ruleEngine: RuleEngine?
 
     private let log = Logger.shared
+
+    var hideMenuBarIcon: Bool {
+        UserDefaults.standard.bool(forKey: "hideMenuBarIcon")
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log.info("BrowserClutch launched")
@@ -17,6 +22,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startTrackingActiveApp()
         registerURLHandler()
         observeConfigChanges()
+        observeMenuBarIconVisibility()
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // When menu bar icon is hidden and user clicks app icon, open settings
+        if hideMenuBarIcon {
+            openSettings()
+        }
+        return true
+    }
+
+    private func openSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        // Try multiple selectors for opening settings (varies by macOS version)
+        if NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) { return }
+        if NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil) { return }
+        // Last resort: try to find and click the menu item
+        if let appMenu = NSApp.mainMenu?.items.first?.submenu {
+            for item in appMenu.items {
+                if item.title.contains("Settings") || item.title.contains("Preferences") {
+                    _ = item.target?.perform(item.action, with: item)
+                    return
+                }
+            }
+        }
     }
 
     private func observeConfigChanges() {
@@ -27,6 +57,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             self?.log.info("Config changed, reloading...")
             self?.reloadConfig()
+        }
+    }
+
+    private func observeMenuBarIconVisibility() {
+        menuBarObserver = NotificationCenter.default.addObserver(
+            forName: .menuBarIconVisibilityChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.log.info("Menu bar icon visibility changed")
+            // The SwiftUI MenuBarExtra will handle this via @AppStorage
         }
     }
 

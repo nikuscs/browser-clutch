@@ -3,9 +3,13 @@ import SwiftUI
 @main
 struct BrowserClutchApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @AppStorage("hideMenuBarIcon") private var hideMenuBarIcon = false
 
     var body: some Scene {
-        MenuBarExtra("BrowserClutch", image: "MenuBarIcon") {
+        MenuBarExtra("BrowserClutch", image: "MenuBarIcon", isInserted: Binding(
+            get: { !hideMenuBarIcon },
+            set: { hideMenuBarIcon = !$0 }
+        )) {
             MenuBarView()
         }
         .menuBarExtraStyle(.menu)
@@ -27,7 +31,7 @@ struct MenuBarView: View {
               let bundleId = bundle.bundleIdentifier else {
             return false
         }
-        return bundleId == "com.browserclutch.app"
+        return bundleId == Bundle.main.bundleIdentifier
     }
 
     private var installedBrowsers: [BrowserInfo] {
@@ -125,7 +129,18 @@ enum BrowserDetector {
         ("com.vivaldi.Vivaldi", "Vivaldi"),
     ]
 
+    private static var cachedBrowsers: [BrowserInfo]?
+    private static var cacheTime: Date?
+    private static let cacheDuration: TimeInterval = 30 // Cache for 30 seconds
+
     static func detectInstalledBrowsers() -> [BrowserInfo] {
+        // Return cached results if available and fresh
+        if let cached = cachedBrowsers,
+           let time = cacheTime,
+           Date().timeIntervalSince(time) < cacheDuration {
+            return cached
+        }
+
         let workspace = NSWorkspace.shared
         var browsers: [BrowserInfo] = []
 
@@ -136,6 +151,10 @@ enum BrowserDetector {
                 browsers.append(BrowserInfo(bundleId: bundleId, name: name, icon: icon))
             }
         }
+
+        // Cache the results
+        cachedBrowsers = browsers
+        cacheTime = Date()
 
         return browsers
     }

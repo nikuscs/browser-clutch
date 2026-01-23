@@ -8,13 +8,23 @@ on:
       - '.gitignore'
       - '.github/workflows/ci.yml'
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 permissions:
   contents: write
+
+env:
+  HAVE_SIGNING_SECRETS: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' }}
+  HAVE_NOTARIZATION_SECRETS: ${{ secrets.APPLE_ID != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' }}
 
 jobs:
   release:
     name: Build & Release
     runs-on: macos-14
+    # Skip for version bump commits to prevent infinite loop
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
 
     steps:
       - name: Checkout
@@ -38,49 +48,42 @@ jobs:
         run: |
           CURRENT="${{ steps.get_version.outputs.current }}"
 
-          # Parse version components
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
           PATCH=${PATCH:-0}
 
-          # Increment patch
           NEW_PATCH=$((PATCH + 1))
           NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          BUILD_NUMBER=$((MAJOR * 10000 + MINOR * 100 + NEW_PATCH))
 
           echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "New version: $NEW_VERSION"
+          echo "build=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION (build $BUILD_NUMBER)"
 
-          # Update Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" BrowserClutch/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_PATCH" BrowserClutch/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" BrowserClutch/Info.plist
 
       - name: Install Apple certificate
-        if: ${{ env.BUILD_CERTIFICATE_BASE64 != '' }}
+        if: env.HAVE_SIGNING_SECRETS == 'true'
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          # Create variables
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          # Decode certificate
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
 
-          # Create temporary keychain
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-          # Import certificate to keychain
           security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
 
       - name: Build Release (Signed)
-        if: ${{ env.BUILD_CERTIFICATE_BASE64 != '' }}
-        env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+        if: env.HAVE_SIGNING_SECRETS == 'true'
         run: |
           xcodebuild -project BrowserClutch.xcodeproj \
             -scheme BrowserClutch \
@@ -95,9 +98,7 @@ jobs:
             -exportOptionsPlist ExportOptions.plist
 
       - name: Build Release (Unsigned)
-        if: ${{ env.BUILD_CERTIFICATE_BASE64 == '' }}
-        env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+        if: env.HAVE_SIGNING_SECRETS != 'true'
         run: |
           xcodebuild -project BrowserClutch.xcodeproj \
             -scheme BrowserClutch \
@@ -117,12 +118,10 @@ jobs:
           VERSION="${{ steps.bump_version.outputs.new }}"
           DMG_NAME="BrowserClutch-${VERSION}.dmg"
 
-          # Create DMG directory structure
           mkdir -p $RUNNER_TEMP/dmg
           cp -R $RUNNER_TEMP/export/BrowserClutch.app $RUNNER_TEMP/dmg/
           ln -s /Applications $RUNNER_TEMP/dmg/Applications
 
-          # Create DMG
           hdiutil create -volname "BrowserClutch" \
             -srcfolder $RUNNER_TEMP/dmg \
             -ov -format UDZO \
@@ -132,9 +131,8 @@ jobs:
           echo "DMG_NAME=$DMG_NAME" >> $GITHUB_ENV
 
       - name: Notarize DMG
-        if: ${{ env.NOTARIZE_APP == 'true' }}
+        if: env.HAVE_SIGNING_SECRETS == 'true' && env.HAVE_NOTARIZATION_SECRETS == 'true'
         env:
-          NOTARIZE_APP: ${{ secrets.NOTARIZE_APP }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -146,14 +144,6 @@ jobs:
             --wait
 
           xcrun stapler staple $DMG_PATH
-
-      - name: Commit version bump
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add BrowserClutch/Info.plist
-          git commit -m "Bump version to ${{ steps.bump_version.outputs.new }}"
-          git push
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -175,3 +165,11 @@ jobs:
             ${{ env.DMG_PATH }}
           draft: false
           prerelease: false
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add BrowserClutch/Info.plist
+          git diff --staged --quiet || git commit -m "Bump version to ${{ steps.bump_version.outputs.new }} [skip ci]"
+          git push

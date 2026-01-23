@@ -33,6 +33,7 @@ struct SettingsView: View {
     @State private var installedApps: [AppInfo] = []
     @State private var isDefaultBrowser: Bool = true
     @State private var launchAtLogin: Bool = false
+    @State private var hideMenuBarIcon: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -62,6 +63,25 @@ struct SettingsView: View {
 
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 16) {
+                    // General options at top
+                    HStack(spacing: 24) {
+                        Toggle("Open at Login", isOn: $launchAtLogin)
+                            .toggleStyle(.checkbox)
+                            .onChange(of: launchAtLogin) { _, newValue in
+                                setLaunchAtLogin(newValue)
+                            }
+
+                        Toggle("Hide Menu Bar Icon", isOn: $hideMenuBarIcon)
+                            .toggleStyle(.checkbox)
+                            .onChange(of: hideMenuBarIcon) { _, newValue in
+                                setHideMenuBarIcon(newValue)
+                            }
+
+                        Spacer()
+                    }
+
+                    Divider()
+
                     // Default Browser Section
                     SettingsSection(title: "DEFAULT BROWSER") {
                         HStack(spacing: 12) {
@@ -163,17 +183,6 @@ struct SettingsView: View {
                         }
                     }
 
-                    Divider()
-
-                    // Launch at Login Section
-                    SettingsSection(title: "STARTUP") {
-                        Toggle("Open at Login", isOn: $launchAtLogin)
-                            .toggleStyle(.switch)
-                            .onChange(of: launchAtLogin) { _, newValue in
-                                setLaunchAtLogin(newValue)
-                            }
-                    }
-
                     Spacer(minLength: 20)
                 }
                 .padding(.horizontal, 24)
@@ -201,6 +210,7 @@ struct SettingsView: View {
             loadConfig()
             checkDefaultBrowser()
             loadLaunchAtLogin()
+            loadHideMenuBarIcon()
         }
     }
 
@@ -323,6 +333,15 @@ struct SettingsView: View {
             // Revert the toggle if it failed
             launchAtLogin = SMAppService.mainApp.status == .enabled
         }
+    }
+
+    private func loadHideMenuBarIcon() {
+        hideMenuBarIcon = UserDefaults.standard.bool(forKey: "hideMenuBarIcon")
+    }
+
+    private func setHideMenuBarIcon(_ hidden: Bool) {
+        UserDefaults.standard.set(hidden, forKey: "hideMenuBarIcon")
+        NotificationCenter.default.post(name: .menuBarIconVisibilityChanged, object: nil)
     }
 }
 
@@ -481,7 +500,18 @@ struct AppInfo: Identifiable {
 }
 
 enum AppDetector {
+    private static var cachedApps: [AppInfo]?
+    private static var cacheTime: Date?
+    private static let cacheDuration: TimeInterval = 60 // Cache for 60 seconds
+
     static func detectAllApps() -> [AppInfo] {
+        // Return cached results if available and fresh
+        if let cached = cachedApps,
+           let time = cacheTime,
+           Date().timeIntervalSince(time) < cacheDuration {
+            return cached
+        }
+
         var apps: [AppInfo] = []
         let fileManager = FileManager.default
         let workspace = NSWorkspace.shared
@@ -493,6 +523,12 @@ enum AppDetector {
             NSHomeDirectory() + "/Applications"
         ]
 
+        let browserIds: Set<String> = [
+            "com.apple.Safari", "com.google.Chrome", "org.mozilla.firefox",
+            "com.brave.Browser", "com.microsoft.edgemac", "company.thebrowser.Browser",
+            "com.operasoftware.Opera", "com.vivaldi.Vivaldi"
+        ]
+
         for directory in appDirectories {
             guard let contents = try? fileManager.contentsOfDirectory(atPath: directory) else { continue }
 
@@ -501,15 +537,13 @@ enum AppDetector {
                 guard let bundle = Bundle(url: URL(fileURLWithPath: appPath)),
                       let bundleId = bundle.bundleIdentifier else { continue }
 
+                // Skip browsers
+                if browserIds.contains(bundleId) { continue }
+
                 let name = bundle.infoDictionary?["CFBundleName"] as? String ??
                            bundle.infoDictionary?["CFBundleDisplayName"] as? String ??
                            (item as NSString).deletingPathExtension
 
-                // Skip browsers
-                let browserIds = ["com.apple.Safari", "com.google.Chrome", "org.mozilla.firefox",
-                                  "com.brave.Browser", "com.microsoft.edgemac", "company.thebrowser.Browser",
-                                  "com.operasoftware.Opera", "com.vivaldi.Vivaldi"]
-                if browserIds.contains(bundleId) { continue }
                 if bundleId.hasPrefix("com.apple.") && name.hasPrefix("com.apple.") { continue }
 
                 let icon = workspace.icon(forFile: appPath)
@@ -519,9 +553,15 @@ enum AppDetector {
         }
 
         var seen = Set<String>()
-        return apps
+        let result = apps
             .filter { seen.insert($0.bundleId).inserted }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        // Cache the results
+        cachedApps = result
+        cacheTime = Date()
+
+        return result
     }
 }
 
@@ -529,4 +569,5 @@ enum AppDetector {
 
 extension Notification.Name {
     static let configDidChange = Notification.Name("configDidChange")
+    static let menuBarIconVisibilityChanged = Notification.Name("menuBarIconVisibilityChanged")
 }
