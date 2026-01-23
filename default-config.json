@@ -1,0 +1,29 @@
+{
+  "defaultBrowser": "com.apple.Safari",
+  "rules": [
+    {
+      "id": "slack-to-chrome",
+      "priority": 100,
+      "source": {
+        "name": "Slack"
+      },
+      "browser": "com.google.Chrome"
+    },
+    {
+      "id": "github-to-brave",
+      "priority": 90,
+      "domain": {
+        "pattern": "*.github.com"
+      },
+      "browser": "com.brave.Browser"
+    },
+    {
+      "id": "twitter-to-firefox",
+      "priority": 80,
+      "domain": {
+        "exact": "twitter.com"
+      },
+      "browser": "org.mozilla.firefox"
+    }
+  ]
+}
