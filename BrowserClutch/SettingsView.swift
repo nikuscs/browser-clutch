@@ -1,4 +1,28 @@
+import ServiceManagement
 import SwiftUI
+
+// MARK: - Window Accessor for Centered Title
+
+struct WindowAccessor: NSViewRepresentable {
+    let title: String
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.title = title
+            window.titleVisibility = .visible
+            window.titlebarAppearsTransparent = false
+            window.styleMask.insert(.titled)
+            window.toolbar = nil
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+// MARK: - Settings View
 
 struct SettingsView: View {
     @State private var defaultBrowser: String = ""
@@ -7,124 +31,176 @@ struct SettingsView: View {
     @State private var isError: Bool = false
     @State private var installedBrowsers: [BrowserInfo] = []
     @State private var installedApps: [AppInfo] = []
-
-    private let contentWidth: CGFloat = 450
+    @State private var isDefaultBrowser: Bool = true
+    @State private var launchAtLogin: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Default Browser
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Default Browser")
-                    .font(.headline)
-
-                Picker("", selection: $defaultBrowser) {
-                    ForEach(installedBrowsers) { browser in
-                        HStack(spacing: 8) {
-                            if let icon = browser.icon {
-                                Image(nsImage: icon)
-                            }
-                            Text(browser.name)
-                        }
-                        .tag(browser.bundleId)
+        VStack(spacing: 0) {
+            // Warning banner if not default browser
+            if !isDefaultBrowser {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    Text("Browser Clutch is not set as your default browser")
+                        .font(.callout)
+                    Spacer()
+                    Button("Set as Default...") {
+                        openDefaultBrowserSettings()
                     }
-                }
-                .labelsHidden()
-                .fixedSize()
-
-                Text("URLs that don't match any rule open here")
-                    .font(.caption)
+                    .buttonStyle(.link)
+                    Button(action: checkDefaultBrowser) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain)
                     .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.orange.opacity(0.1))
             }
 
-            Divider()
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Default Browser Section
+                    SettingsSection(title: "DEFAULT BROWSER") {
+                        HStack(spacing: 12) {
+                            Picker("", selection: $defaultBrowser) {
+                                ForEach(installedBrowsers) { browser in
+                                    HStack(spacing: 8) {
+                                        if let icon = browser.icon {
+                                            Image(nsImage: icon)
+                                        }
+                                        Text(browser.name)
+                                    }
+                                    .tag(browser.bundleId)
+                                }
+                            }
+                            .labelsHidden()
+                            .fixedSize()
 
-            // Rules
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Rules")
-                        .font(.headline)
-                    Spacer()
-                    Text("First match wins")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                            Text("URLs that don't match any rule")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
 
-                if rules.isEmpty {
-                    Text("No rules yet")
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                } else {
-                    VStack(spacing: 1) {
-                        ForEach(Array(rules.enumerated()), id: \.element.id) { index, _ in
-                            RuleRow(
-                                rule: $rules[index],
-                                index: index,
-                                installedApps: installedApps,
-                                installedBrowsers: installedBrowsers,
-                                canMoveUp: index > 0,
-                                canMoveDown: index < rules.count - 1,
-                                onMoveUp: { moveRule(from: index, direction: -1) },
-                                onMoveDown: { moveRule(from: index, direction: 1) },
-                                onDelete: { deleteRule(at: index) }
+                            Spacer()
+                        }
+                    }
+
+                    Divider()
+
+                    // Rules Section
+                    SettingsSection(title: "RULES", subtitle: "First match wins · evaluated top to bottom") {
+                        if rules.isEmpty {
+                            HStack {
+                                Text("No rules configured")
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                            }
+                            .padding(.vertical, 8)
+                        } else {
+                            VStack(spacing: 0) {
+                                ForEach(Array(rules.enumerated()), id: \.element.id) { index, _ in
+                                    RuleRow(
+                                        rule: $rules[index],
+                                        index: index,
+                                        isLast: index == rules.count - 1,
+                                        installedApps: installedApps,
+                                        installedBrowsers: installedBrowsers,
+                                        canMoveUp: index > 0,
+                                        canMoveDown: index < rules.count - 1,
+                                        onMoveUp: { moveRule(from: index, direction: -1) },
+                                        onMoveDown: { moveRule(from: index, direction: 1) },
+                                        onDelete: { deleteRule(at: index) }
+                                    )
+                                }
+                            }
+                            .background(Color(nsColor: .textBackgroundColor))
+                            .cornerRadius(6)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
                             )
                         }
+
+                        Button {
+                            addRule()
+                        } label: {
+                            Label("Add Rule", systemImage: "plus")
+                        }
+                        .buttonStyle(.link)
+                        .padding(.top, 8)
                     }
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .cornerRadius(6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
-                    )
-                }
 
-                Button {
-                    addRule()
-                } label: {
-                    Label("Add Rule", systemImage: "plus")
-                        .font(.body)
+                    Divider()
+
+                    // Config File Section
+                    SettingsSection(title: "CONFIG") {
+                        HStack(spacing: 12) {
+                            Button {
+                                NSWorkspace.shared.open(ConfigManager.shared.configDirectoryURL)
+                            } label: {
+                                Label("Open Config Folder", systemImage: "folder")
+                            }
+
+                            Spacer()
+
+                            if !statusMessage.isEmpty {
+                                Text(statusMessage)
+                                    .font(.caption)
+                                    .foregroundColor(isError ? .red : (statusMessage == "Saved" ? .green : .secondary))
+                                    .lineLimit(1)
+                            }
+
+                            Button("Reload") {
+                                loadConfig()
+                            }
+
+                            Button("Save") {
+                                saveConfig()
+                            }
+                            .keyboardShortcut("s", modifiers: .command)
+                        }
+                    }
+
+                    Divider()
+
+                    // Launch at Login Section
+                    SettingsSection(title: "STARTUP") {
+                        Toggle("Open at Login", isOn: $launchAtLogin)
+                            .toggleStyle(.switch)
+                            .onChange(of: launchAtLogin) { _, newValue in
+                                setLaunchAtLogin(newValue)
+                            }
+                    }
+
+                    Spacer(minLength: 20)
                 }
-                .buttonStyle(.link)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
             }
-
-            Spacer()
 
             Divider()
 
-            // Footer
-            HStack(spacing: 12) {
-                Button {
-                    NSWorkspace.shared.open(ConfigManager.shared.configDirectoryURL)
-                } label: {
-                    Image(systemName: "folder")
-                }
-                .buttonStyle(.borderless)
-                .help("Open config folder")
-
-                Text(statusMessage)
-                    .font(.caption)
-                    .foregroundColor(isError ? .red : (statusMessage == "Saved" ? .green : .secondary))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-
+            // Quit Section
+            HStack {
                 Spacer()
-
-                Button("Reload") {
-                    loadConfig()
+                Button("Quit Browser Clutch") {
+                    NSApp.terminate(nil)
                 }
-
-                Button("Save") {
-                    saveConfig()
-                }
-                .keyboardShortcut("s", modifiers: .command)
+                .controlSize(.large)
             }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
         }
-        .padding(20)
-        .frame(width: 500, height: 450)
+        .background(WindowAccessor(title: "Browser Clutch ®"))
+        .frame(width: 540, height: 480)
         .onAppear {
             installedBrowsers = BrowserDetector.detectInstalledBrowsers()
             installedApps = AppDetector.detectAllApps()
             loadConfig()
+            checkDefaultBrowser()
+            loadLaunchAtLogin()
         }
     }
 
@@ -140,14 +216,14 @@ struct SettingsView: View {
             )
         }
 
-        let configPath = ConfigManager.shared.configFileURL.path
+        let path = ConfigManager.shared.configFileURL.path
             .replacingOccurrences(of: NSHomeDirectory(), with: "~")
-        statusMessage = configPath
+        statusMessage = path
         isError = false
     }
 
     private func saveConfig() {
-        // Validate rules
+        // Validate
         for (index, rule) in rules.enumerated() {
             if rule.appName == nil && (rule.urlPattern ?? "").isEmpty {
                 statusMessage = "Rule \(index + 1): needs app or domain"
@@ -161,14 +237,12 @@ struct SettingsView: View {
             }
         }
 
-        // Check for duplicates
+        // Check duplicates
         for i in 0..<rules.count {
             for j in (i + 1)..<rules.count {
-                let r1 = rules[i]
-                let r2 = rules[j]
-                if r1.appName == r2.appName &&
-                   r1.urlPattern == r2.urlPattern &&
-                   r1.browser == r2.browser {
+                if rules[i].appName == rules[j].appName &&
+                   rules[i].urlPattern == rules[j].urlPattern &&
+                   rules[i].browser == rules[j].browser {
                     statusMessage = "Rules \(i + 1) & \(j + 1) are duplicates"
                     isError = true
                     return
@@ -216,6 +290,68 @@ struct SettingsView: View {
         guard newIndex >= 0 && newIndex < rules.count else { return }
         rules.swapAt(index, newIndex)
     }
+
+    private func checkDefaultBrowser() {
+        guard let testURL = URL(string: "https://example.com"),
+              let defaultBrowserURL = NSWorkspace.shared.urlForApplication(toOpen: testURL),
+              let bundle = Bundle(url: defaultBrowserURL),
+              let bundleId = bundle.bundleIdentifier else {
+            isDefaultBrowser = false
+            return
+        }
+        isDefaultBrowser = bundleId == Bundle.main.bundleIdentifier
+    }
+
+    private func openDefaultBrowserSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func loadLaunchAtLogin() {
+        launchAtLogin = SMAppService.mainApp.status == .enabled
+    }
+
+    private func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            // Revert the toggle if it failed
+            launchAtLogin = SMAppService.mainApp.status == .enabled
+        }
+    }
+}
+
+// MARK: - Settings Section
+
+struct SettingsSection<Content: View>: View {
+    let title: String
+    var subtitle: String? = nil
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                if let subtitle = subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            content()
+        }
+    }
 }
 
 // MARK: - Rule Item Model
@@ -232,6 +368,7 @@ struct RuleItem: Identifiable {
 struct RuleRow: View {
     @Binding var rule: RuleItem
     let index: Int
+    let isLast: Bool
     let installedApps: [AppInfo]
     let installedBrowsers: [BrowserInfo]
     let canMoveUp: Bool
@@ -241,86 +378,96 @@ struct RuleRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            // Move buttons
-            VStack(spacing: 2) {
-                Button(action: onMoveUp) {
-                    Image(systemName: "chevron.up")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(canMoveUp ? .secondary : .clear)
-                }
-                .buttonStyle(.plain)
-                .disabled(!canMoveUp)
-
-                Button(action: onMoveDown) {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(canMoveDown ? .secondary : .clear)
-                }
-                .buttonStyle(.plain)
-                .disabled(!canMoveDown)
-            }
-            .frame(width: 16)
-
-            // App picker
-            Picker("", selection: Binding(
-                get: { rule.appName ?? "__any__" },
-                set: { rule.appName = $0 == "__any__" ? nil : $0 }
-            )) {
-                Text("Any app").tag("__any__")
-                Divider()
-                ForEach(installedApps) { app in
-                    HStack(spacing: 6) {
-                        if let icon = app.icon {
-                            Image(nsImage: icon)
-                        }
-                        Text(app.name)
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                // Move buttons
+                VStack(spacing: 0) {
+                    Button(action: onMoveUp) {
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 9, weight: .semibold))
+                            .frame(width: 16, height: 14)
+                            .contentShape(Rectangle())
                     }
-                    .tag(app.name)
-                }
-            }
-            .labelsHidden()
-            .frame(width: 140)
+                    .buttonStyle(.plain)
+                    .foregroundColor(canMoveUp ? .secondary : .clear)
+                    .disabled(!canMoveUp)
 
-            // Domain field
-            TextField("domain", text: Binding(
-                get: { rule.urlPattern ?? "" },
-                set: { rule.urlPattern = $0.isEmpty ? nil : $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            .frame(width: 120)
-
-            Image(systemName: "arrow.right")
-                .font(.caption)
-                .foregroundColor(.secondary)
-
-            // Browser picker
-            Picker("", selection: $rule.browser) {
-                ForEach(installedBrowsers) { browser in
-                    HStack(spacing: 6) {
-                        if let icon = browser.icon {
-                            Image(nsImage: icon)
-                        }
-                        Text(browser.name)
+                    Button(action: onMoveDown) {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                            .frame(width: 16, height: 14)
+                            .contentShape(Rectangle())
                     }
-                    .tag(browser.bundleId)
+                    .buttonStyle(.plain)
+                    .foregroundColor(canMoveDown ? .secondary : .clear)
+                    .disabled(!canMoveDown)
                 }
-            }
-            .labelsHidden()
-            .frame(width: 110)
 
-            // Delete
-            Button(action: onDelete) {
-                Image(systemName: "xmark")
+                // App picker
+                Picker("", selection: Binding(
+                    get: { rule.appName ?? "__any__" },
+                    set: { rule.appName = $0 == "__any__" ? nil : $0 }
+                )) {
+                    Text("Any app").tag("__any__")
+                    Divider()
+                    ForEach(installedApps) { app in
+                        HStack(spacing: 6) {
+                            if let icon = app.icon {
+                                Image(nsImage: icon)
+                            }
+                            Text(app.name)
+                        }
+                        .tag(app.name)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 130)
+
+                // Domain
+                TextField("any domain", text: Binding(
+                    get: { rule.urlPattern ?? "" },
+                    set: { rule.urlPattern = $0.isEmpty ? nil : $0 }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 110)
+
+                Image(systemName: "arrow.right")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.secondary.opacity(0.6))
+
+                // Browser
+                Picker("", selection: $rule.browser) {
+                    ForEach(installedBrowsers) { browser in
+                        HStack(spacing: 6) {
+                            if let icon = browser.icon {
+                                Image(nsImage: icon)
+                            }
+                            Text(browser.name)
+                        }
+                        .tag(browser.bundleId)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 100)
+
+                Spacer()
+
+                // Delete
+                Button(action: onDelete) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            .help("Delete rule")
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+
+            if !isLast {
+                Divider()
+                    .padding(.leading, 34)
+            }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(index % 2 == 0 ? Color.clear : Color(nsColor: .separatorColor).opacity(0.1))
     }
 }
 
@@ -347,18 +494,12 @@ enum AppDetector {
         ]
 
         for directory in appDirectories {
-            guard let contents = try? fileManager.contentsOfDirectory(atPath: directory) else {
-                continue
-            }
+            guard let contents = try? fileManager.contentsOfDirectory(atPath: directory) else { continue }
 
             for item in contents where item.hasSuffix(".app") {
                 let appPath = (directory as NSString).appendingPathComponent(item)
-                let appURL = URL(fileURLWithPath: appPath)
-
-                guard let bundle = Bundle(url: appURL),
-                      let bundleId = bundle.bundleIdentifier else {
-                    continue
-                }
+                guard let bundle = Bundle(url: URL(fileURLWithPath: appPath)),
+                      let bundleId = bundle.bundleIdentifier else { continue }
 
                 let name = bundle.infoDictionary?["CFBundleName"] as? String ??
                            bundle.infoDictionary?["CFBundleDisplayName"] as? String ??
@@ -369,8 +510,6 @@ enum AppDetector {
                                   "com.brave.Browser", "com.microsoft.edgemac", "company.thebrowser.Browser",
                                   "com.operasoftware.Opera", "com.vivaldi.Vivaldi"]
                 if browserIds.contains(bundleId) { continue }
-
-                // Skip system daemons
                 if bundleId.hasPrefix("com.apple.") && name.hasPrefix("com.apple.") { continue }
 
                 let icon = workspace.icon(forFile: appPath)

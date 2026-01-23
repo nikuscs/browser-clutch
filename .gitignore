@@ -11,22 +11,39 @@ xcuserdata/
 *.ipa
 *.dSYM.zip
 *.dSYM
+*.xcarchive
 
 # Swift Package Manager
 .build/
 .swiftpm/
+Package.resolved
 
 # macOS
 .DS_Store
 .AppleDouble
 .LSOverride
 ._*
+.Trash-*
+*.dmg
 
 # App data
 *.log
 
-# Old backup
-_old/
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+*.app
+*.pkg
+
+# Secrets (never commit these)
+*.p12
+*.mobileprovision
+*.provisionprofile
 
 # Claude Code
 .claude/

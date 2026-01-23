@@ -1,0 +1,177 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '*.md'
+      - '.gitignore'
+      - '.github/workflows/ci.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+      - name: Get current version
+        id: get_version
+        run: |
+          CURRENT_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" BrowserClutch/Info.plist)
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Bump patch version
+        id: bump_version
+        run: |
+          CURRENT="${{ steps.get_version.outputs.current }}"
+
+          # Parse version components
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          PATCH=${PATCH:-0}
+
+          # Increment patch
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+
+          echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+          # Update Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" BrowserClutch/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_PATCH" BrowserClutch/Info.plist
+
+      - name: Install Apple certificate
+        if: ${{ env.BUILD_CERTIFICATE_BASE64 != '' }}
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # Decode certificate
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+      - name: Build Release (Signed)
+        if: ${{ env.BUILD_CERTIFICATE_BASE64 != '' }}
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+        run: |
+          xcodebuild -project BrowserClutch.xcodeproj \
+            -scheme BrowserClutch \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -archivePath $RUNNER_TEMP/BrowserClutch.xcarchive \
+            archive
+
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/BrowserClutch.xcarchive \
+            -exportPath $RUNNER_TEMP/export \
+            -exportOptionsPlist ExportOptions.plist
+
+      - name: Build Release (Unsigned)
+        if: ${{ env.BUILD_CERTIFICATE_BASE64 == '' }}
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+        run: |
+          xcodebuild -project BrowserClutch.xcodeproj \
+            -scheme BrowserClutch \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath $RUNNER_TEMP/DerivedData \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+          mkdir -p $RUNNER_TEMP/export
+          cp -R "$RUNNER_TEMP/DerivedData/Build/Products/Release/BrowserClutch.app" $RUNNER_TEMP/export/
+
+      - name: Create DMG
+        run: |
+          VERSION="${{ steps.bump_version.outputs.new }}"
+          DMG_NAME="BrowserClutch-${VERSION}.dmg"
+
+          # Create DMG directory structure
+          mkdir -p $RUNNER_TEMP/dmg
+          cp -R $RUNNER_TEMP/export/BrowserClutch.app $RUNNER_TEMP/dmg/
+          ln -s /Applications $RUNNER_TEMP/dmg/Applications
+
+          # Create DMG
+          hdiutil create -volname "BrowserClutch" \
+            -srcfolder $RUNNER_TEMP/dmg \
+            -ov -format UDZO \
+            $RUNNER_TEMP/$DMG_NAME
+
+          echo "DMG_PATH=$RUNNER_TEMP/$DMG_NAME" >> $GITHUB_ENV
+          echo "DMG_NAME=$DMG_NAME" >> $GITHUB_ENV
+
+      - name: Notarize DMG
+        if: ${{ env.NOTARIZE_APP == 'true' }}
+        env:
+          NOTARIZE_APP: ${{ secrets.NOTARIZE_APP }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          xcrun notarytool submit $DMG_PATH \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --wait
+
+          xcrun stapler staple $DMG_PATH
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add BrowserClutch/Info.plist
+          git commit -m "Bump version to ${{ steps.bump_version.outputs.new }}"
+          git push
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.bump_version.outputs.new }}
+          name: BrowserClutch v${{ steps.bump_version.outputs.new }}
+          body: |
+            ## BrowserClutch v${{ steps.bump_version.outputs.new }}
+
+            ### Installation
+            1. Download `${{ env.DMG_NAME }}`
+            2. Open the DMG and drag BrowserClutch to Applications
+            3. Launch BrowserClutch from Applications
+            4. Set it as your default browser in System Settings > Desktop & Dock
+
+            ### Changes
+            See [commit history](https://github.com/${{ github.repository }}/commits/main) for details.
+          files: |
+            ${{ env.DMG_PATH }}
+          draft: false
+          prerelease: false
