@@ -1,0 +1,2 @@
+# Development dependencies
+brew "swiftlint"

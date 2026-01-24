@@ -1,0 +1,44 @@
+disabled_rules:
+  - trailing_whitespace
+  - line_length
+  - function_body_length
+  - file_length
+  - type_body_length
+
+opt_in_rules:
+  - empty_count
+  - closure_spacing
+  - contains_over_first_not_nil
+  - fatal_error_message
+  - first_where
+  - toggle_bool
+  - unavailable_function
+  - unneeded_parentheses_in_closure_argument
+
+excluded:
+  - .build
+  - DerivedData
+  - Pods
+
+identifier_name:
+  min_length: 1
+  max_length: 50
+  excluded:
+    - id
+    - x
+    - y
+    - i
+    - j
+    - k
+
+type_name:
+  min_length: 3
+  max_length: 50
+
+nesting:
+  type_level: 3
+  function_level: 3
+
+cyclomatic_complexity:
+  warning: 15
+  error: 25
