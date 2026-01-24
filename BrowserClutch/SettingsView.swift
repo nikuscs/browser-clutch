@@ -34,6 +34,7 @@ struct SettingsView: View {
     @State private var isDefaultBrowser: Bool = true
     @State private var launchAtLogin: Bool = false
     @State private var hideMenuBarIcon: Bool = false
+    @State private var isLoading: Bool = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -57,12 +58,12 @@ struct SettingsView: View {
                     .foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.vertical, 8)
                 .background(Color.orange.opacity(0.1))
             }
 
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
                     // General options at top
                     HStack(spacing: 24) {
                         Toggle("Open at Login", isOn: $launchAtLogin)
@@ -125,7 +126,7 @@ struct SettingsView: View {
                                     .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
                             )
                         } else {
-                            VStack(spacing: 8) {
+                            VStack(spacing: 6) {
                                 ForEach(Array(rules.enumerated()), id: \.element.id) { index, _ in
                                     RuleRow(
                                         rule: $rules[index],
@@ -168,27 +169,61 @@ struct SettingsView: View {
                             Spacer()
 
                             if !statusMessage.isEmpty {
-                                Text(statusMessage)
-                                    .font(.caption)
-                                    .foregroundColor(isError ? .red : (statusMessage == "Saved" ? .green : .secondary))
-                                    .lineLimit(1)
+                                HStack(spacing: 4) {
+                                    if statusMessage == "Autosaved" {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.green)
+                                    }
+                                    Text(statusMessage)
+                                        .font(.caption)
+                                        .foregroundColor(isError ? .red : (statusMessage == "Autosaved" ? .green : .secondary))
+                                        .lineLimit(1)
+                                }
                             }
 
                             Button("Reload") {
                                 loadConfig()
                             }
-
-                            Button("Save") {
-                                saveConfig()
-                            }
-                            .keyboardShortcut("s", modifiers: .command)
                         }
                     }
 
-                    Spacer(minLength: 20)
+                    Divider()
+
+                    // Status Section
+                    SettingsSection(title: "STATUS") {
+                        HStack(spacing: 8) {
+                            if isDefaultBrowser {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Browser Clutch is your default browser")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.orange)
+                                Text("Not set as default browser")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Button("Open Settings...") {
+                                    openDefaultBrowserSettings()
+                                }
+                                Button(action: checkDefaultBrowser) {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 11))
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                        }
+                    }
+
+                    Spacer(minLength: 12)
                 }
                 .padding(.horizontal, 24)
-                .padding(.vertical, 20)
+                .padding(.vertical, 16)
             }
 
             Divider()
@@ -202,10 +237,10 @@ struct SettingsView: View {
                 .controlSize(.large)
             }
             .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            .padding(.vertical, 12)
         }
         .background(WindowAccessor(title: "Browser Clutch ®"))
-        .frame(width: 540, height: 480)
+        .frame(width: 540, height: 520)
         .onAppear {
             installedBrowsers = BrowserDetector.detectInstalledBrowsers()
             installedApps = AppDetector.detectAllApps()
@@ -213,6 +248,16 @@ struct SettingsView: View {
             checkDefaultBrowser()
             loadLaunchAtLogin()
             loadHideMenuBarIcon()
+            // Allow autosave after initial load
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isLoading = false
+            }
+        }
+        .onChange(of: defaultBrowser) { _, _ in
+            autosave()
+        }
+        .onChange(of: rules) { _, _ in
+            autosave()
         }
     }
 
@@ -280,13 +325,18 @@ struct SettingsView: View {
             let data = try encoder.encode(config)
             ConfigManager.shared.ensureConfigDirectoryExists()
             try data.write(to: ConfigManager.shared.configFileURL)
-            statusMessage = "Saved"
+            statusMessage = "Autosaved"
             isError = false
             NotificationCenter.default.post(name: .configDidChange, object: nil)
         } catch {
             statusMessage = "Error: \(error.localizedDescription)"
             isError = true
         }
+    }
+
+    private func autosave() {
+        guard !isLoading else { return }
+        saveConfig()
     }
 
     private func addRule() {
@@ -355,8 +405,8 @@ struct SettingsSection<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.caption)
                     .fontWeight(.medium)
@@ -377,11 +427,18 @@ struct SettingsSection<Content: View>: View {
 
 // MARK: - Rule Item Model
 
-struct RuleItem: Identifiable {
+struct RuleItem: Identifiable, Equatable {
     let id = UUID()
     var appName: String?
     var urlPattern: String?
     var browser: String
+
+    static func == (lhs: RuleItem, rhs: RuleItem) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.appName == rhs.appName &&
+        lhs.urlPattern == rhs.urlPattern &&
+        lhs.browser == rhs.browser
+    }
 }
 
 // MARK: - Rule Row
@@ -478,7 +535,7 @@ struct RuleRow: View {
             .opacity(0.5)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .overlay(
             RoundedRectangle(cornerRadius: 6)
                 .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
