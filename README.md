@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="BrowserClutch/icon.icon/Assets/icon.png" width="128" height="128" alt="BrowserClutch">
+  <img src="BrowserClutch/icon.icon/Assets/icon.png" width="128" height="128" alt="Browser Clutch ®">
 </p>
 
 <h1 align="center">Browser Clutch ®</h1>
@@ -48,39 +48,12 @@
 
 ---
 
-## Configuration
-
-Config file: `~/Library/Application Support/BrowserClutch/config.json`
-
-```json
-{
-  "defaultBrowser": "com.apple.Safari",
-  "rules": [
-    { "source": { "name": "Slack" }, "browser": "com.google.Chrome" },
-    { "domain": { "pattern": "*.github.com" }, "browser": "org.mozilla.firefox" }
-  ]
-}
-```
-
-### Browser IDs
-
-| Browser | Bundle ID |
-|---------|-----------|
-| Safari | `com.apple.Safari` |
-| Chrome | `com.google.Chrome` |
-| Firefox | `org.mozilla.firefox` |
-| Brave | `com.brave.Browser` |
-| Edge | `com.microsoft.edgemac` |
-| Arc | `company.thebrowser.Browser` |
-
----
-
 ## FAQ
 
 <details>
-<summary><strong>How do I set BrowserClutch as my default browser?</strong></summary>
+<summary><strong>How do I set Browser Clutch ® as my default browser?</strong></summary>
 <br>
-System Settings → Desktop & Dock → Default web browser → BrowserClutch
+System Settings → Desktop & Dock → Default web browser → Browser Clutch ®
 </details>
 
 <details>
@@ -96,9 +69,9 @@ The app isn't notarized yet. Right-click the app → Open, then click Open in th
 </details>
 
 <details>
-<summary><strong>Can I match URLs by regex?</strong></summary>
+<summary><strong>How do I configure rules?</strong></summary>
 <br>
-Yes. Use <code>"source": { "pattern": "regex" }</code> for apps or <code>"domain": { "pattern": "*.example.com" }</code> for domains.
+Open Browser Clutch ® from the menu bar and use the Settings to add rules.
 </details>
 
 ---
