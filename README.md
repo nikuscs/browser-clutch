@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="BrowserClutch/icon.icon/Assets/icon.png" width="128" height="128" alt="Browser Clutch ®">
+  <img src=".github/assets/app-icon.png" width="128" height="128" alt="Browser Clutch ®">
 </p>
 
 <h1 align="center">Browser Clutch ®</h1>
