@@ -1,5 +1,9 @@
 <p align="center">
-  <img src=".github/assets/app-icon.png" width="128" height="128" alt="Browser Clutch ®">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/app-icon-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/app-icon.png">
+    <img src=".github/assets/app-icon.png" width="128" height="128" alt="Browser Clutch ®">
+  </picture>
 </p>
 
 <h1 align="center">Browser Clutch ®</h1>
