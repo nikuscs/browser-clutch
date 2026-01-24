@@ -40,11 +40,12 @@
 
 ---
 
-## Screenshot
+## Screenshots
 
-<!-- TODO: Add screenshot here -->
 <p align="center">
-  <em>Screenshot coming soon</em>
+  <img src="assets/screenshot-settings.png" width="540" alt="Settings">
+    <br><br>
+  <img src="assets/screenshot-menu-bar.png" width="400" alt="Menu Bar">
 </p>
 
 ---
