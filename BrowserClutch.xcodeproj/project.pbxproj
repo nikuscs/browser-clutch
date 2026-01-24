@@ -21,7 +21,7 @@
 		A1000015 /* Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000015 /* Notifications.swift */; };
 		A1000016 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000016 /* AboutView.swift */; };
 		A1000017 /* RuleRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000017 /* RuleRow.swift */; };
-		FCC9BCD42F242F2D00F36C20 /* icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = FCC9BCD32F242F2D00F36C20 /* icon.icon */; };
+		FCC9BCD42F242F2D00F36C20 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = FCC9BCD32F242F2D00F36C20 /* AppIcon.icns */; };
 		B1000001 /* SourceMatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001 /* SourceMatchTests.swift */; };
 		B1000002 /* DomainMatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000002 /* DomainMatchTests.swift */; };
 		B1000003 /* RuleEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000003 /* RuleEngineTests.swift */; };
@@ -56,7 +56,7 @@
 		A2000016 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		A2000017 /* RuleRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleRow.swift; sourceTree = "<group>"; };
 		A3000001 /* BrowserClutch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BrowserClutch.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		FCC9BCD32F242F2D00F36C20 /* icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = icon.icon; sourceTree = "<group>"; };
+		FCC9BCD32F242F2D00F36C20 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		B2000001 /* SourceMatchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceMatchTests.swift; sourceTree = "<group>"; };
 		B2000002 /* DomainMatchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainMatchTests.swift; sourceTree = "<group>"; };
 		B2000003 /* RuleEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleEngineTests.swift; sourceTree = "<group>"; };
@@ -121,7 +121,7 @@
 				A2000008 /* Info.plist */,
 				A2000009 /* BrowserClutch.entitlements */,
 				A2000011 /* Assets.xcassets */,
-				FCC9BCD32F242F2D00F36C20 /* icon.icon */,
+				FCC9BCD32F242F2D00F36C20 /* AppIcon.icns */,
 			);
 			path = BrowserClutch;
 			sourceTree = "<group>";
@@ -212,7 +212,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000009 /* Assets.xcassets in Resources */,
-				FCC9BCD42F242F2D00F36C20 /* icon.icon in Resources */,
+				FCC9BCD42F242F2D00F36C20 /* AppIcon.icns in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -384,8 +384,6 @@
 		AC000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = icon;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = BrowserClutch/BrowserClutch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -409,8 +407,6 @@
 		AC000002 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = icon;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = BrowserClutch/BrowserClutch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
