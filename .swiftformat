@@ -1,0 +1,29 @@
+# SwiftFormat Configuration for Browser Clutch
+
+--swiftversion 5.9
+--indent 4
+--maxwidth 120
+--wraparguments before-first
+--wrapcollections before-first
+--wrapparameters before-first
+--closingparen same-line
+--trimwhitespace always
+--insertlines enabled
+--removelines enabled
+--emptybraces no-space
+--ranges no-space
+--semicolons never
+--commas always
+--stripunusedargs closure-only
+--self insert
+--importgrouping alpha
+--extensionacl on-declarations
+
+# Organize code
+--marktypes always
+--markextensions always
+--organizetypes class,struct,enum,extension
+--extensionmark "MARK: - %t + %c"
+
+# Exclusions
+--exclude .build,DerivedData,xcuserdata,.swiftpm

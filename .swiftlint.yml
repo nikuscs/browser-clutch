@@ -1,0 +1,69 @@
+# SwiftLint Configuration for Browser Clutch
+
+disabled_rules:
+  - trailing_whitespace
+  - line_length
+  - todo
+
+opt_in_rules:
+  - empty_count
+  - closure_spacing
+  - contains_over_first_not_nil
+  - fatal_error_message
+  - first_where
+  - toggle_bool
+  - unavailable_function
+  - unneeded_parentheses_in_closure_argument
+  - modifier_order
+  - overridden_super_call
+  - implicit_return
+  - multiline_arguments
+  - multiline_parameters
+
+excluded:
+  - .build
+  - DerivedData
+  - .swiftpm
+  - xcuserdata
+
+identifier_name:
+  min_length: 1
+  max_length: 60
+  excluded:
+    - id
+    - x
+    - y
+    - i
+    - j
+    - k
+    - n
+    - url
+    - app
+
+type_name:
+  min_length: 2
+  max_length: 60
+
+nesting:
+  type_level: 4
+  function_level: 4
+
+cyclomatic_complexity:
+  warning: 20
+  error: 30
+
+function_body_length:
+  warning: 100
+  error: 200
+
+file_length:
+  warning: 500
+  error: 1000
+
+type_body_length:
+  warning: 400
+  error: 600
+
+large_tuple:
+  warning: 4
+  error: 5

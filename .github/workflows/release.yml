@@ -1,0 +1,136 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  XCODE_PROJECT: "BrowserClutch.xcodeproj"
+  XCODE_SCHEME: "BrowserClutch"
+  APP_NAME: "BrowserClutch"
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+          # Update Info.plist to match tag
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          BUILD=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" BrowserClutch/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" BrowserClutch/Info.plist
+
+      - name: Get previous tag
+        id: prev_tag
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          echo "tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREV_TAG"
+
+      - name: Build
+        run: |
+          xcodebuild -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -archivePath build/$APP_NAME.xcarchive \
+            CODE_SIGN_IDENTITY="-" \
+            archive
+
+      - name: Export app
+        run: |
+          cat > ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>destination</key>
+              <string>export</string>
+              <key>method</key>
+              <string>mac-application</string>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath build/$APP_NAME.xcarchive \
+            -exportPath build \
+            -exportOptionsPlist ExportOptions.plist
+
+      - name: Create DMG
+        run: |
+          mkdir -p build/dmg
+          cp -R "build/$APP_NAME.app" build/dmg/
+          ln -s /Applications build/dmg/Applications
+          hdiutil create -volname "$APP_NAME" \
+            -srcfolder build/dmg \
+            -ov -format UDZO \
+            "build/$APP_NAME-${{ steps.version.outputs.version }}.dmg"
+
+      - name: Build Changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v6
+        with:
+          configurationJson: |
+            {
+              "categories": [
+                { "title": "## ✨ Features", "labels": ["feature", "enhancement"] },
+                { "title": "## 🐛 Bug Fixes", "labels": ["bug", "fix"] },
+                { "title": "## 📝 Documentation", "labels": ["documentation"] },
+                { "title": "## 🔧 Other", "labels": [] }
+              ],
+              "template": "#{{CHANGELOG}}\n\n**Full Changelog**: #{{RELEASE_DIFF}}",
+              "pr_template": "- #{{TITLE}} (#{{NUMBER}})",
+              "empty_template": "No changes since last release."
+            }
+          fromTag: ${{ steps.prev_tag.outputs.tag }}
+          toTag: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ env.APP_NAME }} ${{ github.ref_name }}
+          body: |
+            ## Installation
+            1. Download the DMG below
+            2. Open it and drag ${{ env.APP_NAME }} to Applications
+            3. Right-click the app → Open (first time only, to bypass Gatekeeper)
+            4. Set as default browser in System Settings → Desktop & Dock
+
+            ${{ steps.changelog.outputs.changelog }}
+          files: build/${{ env.APP_NAME }}-${{ steps.version.outputs.version }}.dmg
+          draft: false
+          prerelease: false
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: ${{ env.APP_NAME }}-${{ steps.version.outputs.version }}
+          path: build/${{ env.APP_NAME }}-${{ steps.version.outputs.version }}.dmg
+          if-no-files-found: ignore
