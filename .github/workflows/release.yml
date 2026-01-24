@@ -7,6 +7,7 @@ on:
       - '*.md'
       - '.gitignore'
       - '.github/workflows/ci.yml'
+      - '.swiftlint.yml'
 
 concurrency:
   group: release
@@ -16,14 +17,14 @@ permissions:
   contents: write
 
 env:
-  HAVE_SIGNING_SECRETS: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' }}
-  HAVE_NOTARIZATION_SECRETS: ${{ secrets.APPLE_ID != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' }}
+  XCODE_PROJECT: "BrowserClutch.xcodeproj"
+  XCODE_SCHEME: "BrowserClutch"
+  APP_NAME: "BrowserClutch"
 
 jobs:
   release:
     name: Build & Release
-    runs-on: macos-14
-    # Skip for version bump commits to prevent infinite loop
+    runs-on: macos-15
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
 
     steps:
@@ -33,143 +34,118 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
-
-      - name: Get current version
-        id: get_version
+      - name: Get previous tag
+        id: prev_tag
         run: |
-          CURRENT_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" BrowserClutch/Info.plist)
-          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "Current version: $CURRENT_VERSION"
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREV_TAG"
 
-      - name: Bump patch version
-        id: bump_version
+      - name: Get version & bump
+        id: version
         run: |
-          CURRENT="${{ steps.get_version.outputs.current }}"
-
+          CURRENT=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" BrowserClutch/Info.plist)
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
           PATCH=${PATCH:-0}
-
           NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-          BUILD_NUMBER=$((MAJOR * 10000 + MINOR * 100 + NEW_PATCH))
+          VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          BUILD=$((MAJOR * 10000 + MINOR * 100 + NEW_PATCH))
 
-          echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "build=$BUILD_NUMBER" >> $GITHUB_OUTPUT
-          echo "New version: $NEW_VERSION (build $BUILD_NUMBER)"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" BrowserClutch/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" BrowserClutch/Info.plist
 
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" BrowserClutch/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" BrowserClutch/Info.plist
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION (build $BUILD)"
 
-      - name: Install Apple certificate
-        if: env.HAVE_SIGNING_SECRETS == 'true'
-        env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      - name: Build
         run: |
-          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-
-      - name: Build Release (Signed)
-        if: env.HAVE_SIGNING_SECRETS == 'true'
-        run: |
-          xcodebuild -project BrowserClutch.xcodeproj \
-            -scheme BrowserClutch \
+          xcodebuild -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
             -configuration Release \
-            -destination 'platform=macOS' \
-            -archivePath $RUNNER_TEMP/BrowserClutch.xcarchive \
+            -archivePath build/$APP_NAME.xcarchive \
+            CODE_SIGN_IDENTITY="-" \
             archive
 
-          xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/BrowserClutch.xcarchive \
-            -exportPath $RUNNER_TEMP/export \
-            -exportOptionsPlist ExportOptions.plist
-
-      - name: Build Release (Unsigned)
-        if: env.HAVE_SIGNING_SECRETS != 'true'
+      - name: Export app
         run: |
-          xcodebuild -project BrowserClutch.xcodeproj \
-            -scheme BrowserClutch \
-            -configuration Release \
-            -destination 'platform=macOS' \
-            -derivedDataPath $RUNNER_TEMP/DerivedData \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            build
+          cat > ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>destination</key>
+              <string>export</string>
+              <key>method</key>
+              <string>mac-application</string>
+          </dict>
+          </plist>
+          EOF
 
-          mkdir -p $RUNNER_TEMP/export
-          cp -R "$RUNNER_TEMP/DerivedData/Build/Products/Release/BrowserClutch.app" $RUNNER_TEMP/export/
+          xcodebuild -exportArchive \
+            -archivePath build/$APP_NAME.xcarchive \
+            -exportPath build \
+            -exportOptionsPlist ExportOptions.plist
 
       - name: Create DMG
         run: |
-          VERSION="${{ steps.bump_version.outputs.new }}"
-          DMG_NAME="BrowserClutch-${VERSION}.dmg"
-
-          mkdir -p $RUNNER_TEMP/dmg
-          cp -R $RUNNER_TEMP/export/BrowserClutch.app $RUNNER_TEMP/dmg/
-          ln -s /Applications $RUNNER_TEMP/dmg/Applications
-
-          hdiutil create -volname "BrowserClutch" \
-            -srcfolder $RUNNER_TEMP/dmg \
+          mkdir -p build/dmg
+          cp -R "build/$APP_NAME.app" build/dmg/
+          ln -s /Applications build/dmg/Applications
+          hdiutil create -volname "$APP_NAME" \
+            -srcfolder build/dmg \
             -ov -format UDZO \
-            $RUNNER_TEMP/$DMG_NAME
+            "build/$APP_NAME-${{ steps.version.outputs.version }}.dmg"
 
-          echo "DMG_PATH=$RUNNER_TEMP/$DMG_NAME" >> $GITHUB_ENV
-          echo "DMG_NAME=$DMG_NAME" >> $GITHUB_ENV
-
-      - name: Notarize DMG
-        if: env.HAVE_SIGNING_SECRETS == 'true' && env.HAVE_NOTARIZATION_SECRETS == 'true'
+      - name: Build Changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v5
+        with:
+          configurationJson: |
+            {
+              "categories": [
+                { "title": "## ✨ Features", "labels": ["feature", "enhancement"] },
+                { "title": "## 🐛 Bug Fixes", "labels": ["bug", "fix"] },
+                { "title": "## 📝 Documentation", "labels": ["documentation"] },
+                { "title": "## 🔧 Other", "labels": [] }
+              ],
+              "template": "#{{CHANGELOG}}\n\n**Full Changelog**: #{{RELEASE_DIFF}}",
+              "pr_template": "- #{{TITLE}} (#{{NUMBER}})",
+              "empty_template": "No changes since last release."
+            }
+          fromTag: ${{ steps.prev_tag.outputs.tag }}
+          toTag: HEAD
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-        run: |
-          xcrun notarytool submit $DMG_PATH \
-            --apple-id "$APPLE_ID" \
-            --team-id "$APPLE_TEAM_ID" \
-            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-            --wait
-
-          xcrun stapler staple $DMG_PATH
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.bump_version.outputs.new }}
-          name: BrowserClutch v${{ steps.bump_version.outputs.new }}
+          tag_name: v${{ steps.version.outputs.version }}
+          name: ${{ env.APP_NAME }} v${{ steps.version.outputs.version }}
           body: |
-            ## BrowserClutch v${{ steps.bump_version.outputs.new }}
+            ## Installation
+            1. Download the DMG below
+            2. Open it and drag ${{ env.APP_NAME }} to Applications
+            3. Right-click the app → Open (first time only, to bypass Gatekeeper)
+            4. Set as default browser in System Settings → Desktop & Dock
 
-            ### Installation
-            1. Download `${{ env.DMG_NAME }}`
-            2. Open the DMG and drag BrowserClutch to Applications
-            3. Launch BrowserClutch from Applications
-            4. Set it as your default browser in System Settings > Desktop & Dock
-
-            ### Changes
-            See [commit history](https://github.com/${{ github.repository }}/commits/main) for details.
-          files: |
-            ${{ env.DMG_PATH }}
+            ${{ steps.changelog.outputs.changelog }}
+          files: build/${{ env.APP_NAME }}-${{ steps.version.outputs.version }}.dmg
           draft: false
           prerelease: false
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ env.APP_NAME }}-${{ steps.version.outputs.version }}
+          path: build/${{ env.APP_NAME }}-${{ steps.version.outputs.version }}.dmg
+          if-no-files-found: ignore
 
       - name: Commit version bump
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add BrowserClutch/Info.plist
-          git diff --staged --quiet || git commit -m "Bump version to ${{ steps.bump_version.outputs.new }} [skip ci]"
+          git diff --staged --quiet || git commit -m "v${{ steps.version.outputs.version }} [skip ci]"
           git push

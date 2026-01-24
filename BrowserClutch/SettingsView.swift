@@ -110,16 +110,22 @@ struct SettingsView: View {
                     Divider()
 
                     // Rules Section
-                    SettingsSection(title: "RULES", subtitle: "First match wins · evaluated top to bottom") {
+                    SettingsSection(title: "RULES", subtitle: "First match wins · supports wildcards (*) and regex") {
                         if rules.isEmpty {
                             HStack {
                                 Text("No rules configured")
                                     .foregroundStyle(.secondary)
+                                    .font(.callout)
                                 Spacer()
                             }
-                            .padding(.vertical, 8)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 10)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
+                            )
                         } else {
-                            VStack(spacing: 0) {
+                            VStack(spacing: 8) {
                                 ForEach(Array(rules.enumerated()), id: \.element.id) { index, _ in
                                     RuleRow(
                                         rule: $rules[index],
@@ -135,21 +141,17 @@ struct SettingsView: View {
                                     )
                                 }
                             }
-                            .background(Color(nsColor: .textBackgroundColor))
-                            .cornerRadius(6)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-                            )
                         }
 
                         Button {
                             addRule()
                         } label: {
-                            Label("Add Rule", systemImage: "plus")
+                            Label("Add Rule", systemImage: "plus.circle.fill")
+                                .font(.callout)
                         }
-                        .buttonStyle(.link)
-                        .padding(.top, 8)
+                        .buttonStyle(.plain)
+                        .foregroundColor(.accentColor)
+                        .padding(.top, 4)
                     }
 
                     Divider()
@@ -397,96 +399,90 @@ struct RuleRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                // Move buttons
-                VStack(spacing: 0) {
-                    Button(action: onMoveUp) {
-                        Image(systemName: "chevron.up")
-                            .font(.system(size: 9, weight: .semibold))
-                            .frame(width: 16, height: 14)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(canMoveUp ? .secondary : .clear)
-                    .disabled(!canMoveUp)
-
-                    Button(action: onMoveDown) {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9, weight: .semibold))
-                            .frame(width: 16, height: 14)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(canMoveDown ? .secondary : .clear)
-                    .disabled(!canMoveDown)
-                }
-
-                // App picker
-                Picker("", selection: Binding(
-                    get: { rule.appName ?? "__any__" },
-                    set: { rule.appName = $0 == "__any__" ? nil : $0 }
-                )) {
-                    Text("Any app").tag("__any__")
-                    Divider()
-                    ForEach(installedApps) { app in
-                        HStack(spacing: 6) {
-                            if let icon = app.icon {
-                                Image(nsImage: icon)
-                            }
-                            Text(app.name)
-                        }
-                        .tag(app.name)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 130)
-
-                // Domain
-                TextField("any domain", text: Binding(
-                    get: { rule.urlPattern ?? "" },
-                    set: { rule.urlPattern = $0.isEmpty ? nil : $0 }
-                ))
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 110)
-
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary.opacity(0.6))
-
-                // Browser
-                Picker("", selection: $rule.browser) {
-                    ForEach(installedBrowsers) { browser in
-                        HStack(spacing: 6) {
-                            if let icon = browser.icon {
-                                Image(nsImage: icon)
-                            }
-                            Text(browser.name)
-                        }
-                        .tag(browser.bundleId)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 100)
-
-                Spacer()
-
-                // Delete
-                Button(action: onDelete) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(.secondary)
+        HStack(spacing: 8) {
+            // Reorder handle
+            VStack(spacing: 2) {
+                Button(action: onMoveUp) {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 9, weight: .medium))
                 }
                 .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+                .foregroundColor(canMoveUp ? .secondary : .secondary.opacity(0.3))
+                .disabled(!canMoveUp)
 
-            if !isLast {
-                Divider()
-                    .padding(.leading, 34)
+                Button(action: onMoveDown) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(canMoveDown ? .secondary : .secondary.opacity(0.3))
+                .disabled(!canMoveDown)
             }
+
+            // App picker
+            Picker("", selection: Binding(
+                get: { rule.appName ?? "__any__" },
+                set: { rule.appName = $0 == "__any__" ? nil : $0 }
+            )) {
+                Text("Any app").tag("__any__")
+                Divider()
+                ForEach(installedApps) { app in
+                    HStack(spacing: 6) {
+                        if let icon = app.icon {
+                            Image(nsImage: icon)
+                        }
+                        Text(app.name)
+                    }
+                    .tag(app.name)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 110)
+
+            // Domain field
+            TextField("*", text: Binding(
+                get: { rule.urlPattern ?? "" },
+                set: { rule.urlPattern = $0.isEmpty ? nil : $0 }
+            ))
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 100)
+
+            Image(systemName: "arrow.right")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.secondary.opacity(0.4))
+
+            // Browser picker
+            Picker("", selection: $rule.browser) {
+                ForEach(installedBrowsers) { browser in
+                    HStack(spacing: 6) {
+                        if let icon = browser.icon {
+                            Image(nsImage: icon)
+                        }
+                        Text(browser.name)
+                    }
+                    .tag(browser.bundleId)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 100)
+
+            Spacer()
+
+            // Delete button
+            Button(action: onDelete) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .opacity(0.5)
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+        )
     }
 }
 
