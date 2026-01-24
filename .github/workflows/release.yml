@@ -29,6 +29,9 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Select Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+
       - name: Get version from tag
         id: version
         run: |
@@ -79,6 +82,12 @@ jobs:
             -exportPath build \
             -exportOptionsPlist ExportOptions.plist
 
+      - name: Clean icon assets
+        run: |
+          # Remove raw icon.icon folder, keep only compiled icon.icns
+          rm -rf "build/$APP_NAME.app/Contents/Resources/icon.icon"
+          ls -la "build/$APP_NAME.app/Contents/Resources/"
+
       - name: Create DMG
         run: |
           mkdir -p build/dmg
@@ -120,7 +129,8 @@ jobs:
             1. Download the DMG below
             2. Open it and drag ${{ env.APP_NAME }} to Applications
             3. Right-click the app → Open (first time only, to bypass Gatekeeper)
-            4. Set as default browser in System Settings → Desktop & Dock
+            4. Authorize the app in Settings -> Security & Privacy -> "Browser Clutch ®" -> Open Anyway
+            5. Set as default browser in System Settings → Desktop & Dock
 
             ${{ steps.changelog.outputs.changelog }}
           files: build/${{ env.APP_NAME }}-${{ steps.version.outputs.version }}.dmg

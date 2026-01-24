@@ -56,7 +56,8 @@
 2. Open the DMG and drag **Browser Clutch ®** to Applications
 3. Launch Browser Clutch ®
 4. Right-click → Open (first time only, to bypass Gatekeeper)
-5. Set as default browser: **System Settings → Desktop & Dock → Default web browser**
+5. Authorize the app in Settings -> Security & Privacy -> "Browser Clutch ®" -> Open Anyway
+6. Set as default browser: **System Settings → Desktop & Dock → Default web browser**
 
 ---
 
