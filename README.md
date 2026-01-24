@@ -2,7 +2,7 @@
   <img src="BrowserClutch/icon.icon/Assets/icon.png" width="128" height="128" alt="BrowserClutch">
 </p>
 
-<h1 align="center">BrowserClutch</h1>
+<h1 align="center">Browser Clutch ®</h1>
 
 <p align="center">
   <strong>Route URLs to different browsers based on rules</strong><br>
@@ -41,8 +41,8 @@
 ## Installation
 
 1. Download the latest DMG from [**Releases**](../../releases/latest)
-2. Open the DMG and drag **BrowserClutch** to Applications
-3. Launch BrowserClutch
+2. Open the DMG and drag **Browser Clutch ®** to Applications
+3. Launch Browser Clutch ®
 4. Right-click → Open (first time only, to bypass Gatekeeper)
 5. Set as default browser: **System Settings → Desktop & Dock → Default web browser**
 
