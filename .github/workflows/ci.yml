@@ -34,7 +34,7 @@ jobs:
           xcodebuild test \
             -project BrowserClutch.xcodeproj \
             -scheme BrowserClutch \
-            -destination 'platform=macOS'
+            -destination 'platform=macOS'pp
 
       - name: Build
         run: |
