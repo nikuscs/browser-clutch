@@ -55,9 +55,7 @@
 1. Download the latest DMG from [**Releases**](../../releases/latest)
 2. Open the DMG and drag **Browser Clutch ®** to Applications
 3. Launch Browser Clutch ®
-4. Right-click → Open (first time only, to bypass Gatekeeper)
-5. Authorize the app in Settings -> Security & Privacy -> "Browser Clutch ®" -> Open Anyway
-6. Set as default browser: **System Settings → Desktop & Dock → Default web browser**
+4. Set as default browser: **System Settings → Desktop & Dock → Default web browser**
 
 ---
 
@@ -72,7 +70,7 @@ System Settings → Desktop & Dock → Default web browser → Browser Clutch ®
 <details>
 <summary><strong>Why does macOS say the app is damaged or unverified?</strong></summary>
 <br>
-The app isn't notarized yet. Right-click the app → Open, then click Open in the dialog.
+The app is signed and notarized. If you see this warning, re-download the DMG from the latest release — older versions were unsigned.
 </details>
 
 <details>
