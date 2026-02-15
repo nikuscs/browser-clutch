@@ -2,6 +2,16 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      version_bump:
+        description: Version bump type
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
   push:
     tags:
       - 'v*'
@@ -39,13 +49,17 @@ jobs:
             -scheme BrowserClutch \
             -destination 'platform=macOS'
 
-  build-and-release:
-    name: Build, Sign & Release
+  create-tag:
+    name: Create Tag
     needs: checks
-    runs-on: macos-15
-    environment: release
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+      commit_sha: ${{ steps.commit.outputs.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -53,10 +67,84 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify main branch
+        run: |
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "::error::Release must be run from main branch, not ${{ github.ref }}"
+            exit 1
+          fi
+
+      - name: Read current version
+        id: current
+        run: |
+          VERSION=$(grep 'MARKETING_VERSION' ${{ env.XCODE_PROJECT }}/project.pbxproj | head -1 | sed 's/.*= //' | tr -d ';' | xargs)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Bump version
+        id: bump
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          case "${{ inputs.version_bump }}" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Update version in project
+        run: |
+          NEW_VERSION="${{ steps.bump.outputs.version }}"
+          sed -i 's/MARKETING_VERSION = .*/MARKETING_VERSION = '"$NEW_VERSION"';/' ${{ env.XCODE_PROJECT }}/project.pbxproj
+
+      - name: Commit and tag
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ${{ env.XCODE_PROJECT }}/project.pbxproj
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.version }}"
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          git tag -a "${{ steps.bump.outputs.tag }}" -m "Release ${{ steps.bump.outputs.tag }}"
+          git push origin main --follow-tags
+
+  build-and-release:
+    name: Build, Sign & Release
+    needs: [checks, create-tag]
+    if: always() && needs.checks.result == 'success' && (needs.create-tag.result == 'success' || needs.create-tag.result == 'skipped')
+    runs-on: macos-15
+    environment: release
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.create-tag.outputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Get version from tag
         id: version
         run: |
-          VERSION=${GITHUB_REF_NAME#v}
+          VERSION=${RELEASE_TAG#v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
@@ -211,15 +299,15 @@ jobs:
               "empty_template": "No changes since last release."
             }
           fromTag: ${{ steps.prev_tag.outputs.tag }}
-          toTag: ${{ github.ref_name }}
+          toTag: ${{ env.RELEASE_TAG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ env.APP_NAME }} ${{ github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.APP_NAME }} ${{ env.RELEASE_TAG }}
           body: |
             ## Installation
             1. Download the DMG below
@@ -246,25 +334,25 @@ jobs:
 
   cleanup:
     name: Cleanup on failure
-    needs: [checks, build-and-release]
-    if: failure()
+    needs: [create-tag, build-and-release]
+    if: failure() && needs.create-tag.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Delete partial release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete tag and revert commit
         run: |
-          TAG_NAME="${GITHUB_REF_NAME}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Delete the release if it was partially created
-          RELEASE_ID=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG_NAME" --jq '.id' 2>/dev/null || echo "")
-          if [ -n "$RELEASE_ID" ]; then
-            echo "Deleting partial release $RELEASE_ID"
-            gh api -X DELETE "repos/${{ github.repository }}/releases/$RELEASE_ID" || true
-          fi
+          git push --delete origin ${{ needs.create-tag.outputs.tag }} || true
 
-          # Delete the tag so the user can fix and re-tag
-          gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/$TAG_NAME" || true
-          echo "Cleaned up tag $TAG_NAME — fix the issue and re-tag to retry"
+          git pull origin main
+          git revert ${{ needs.create-tag.outputs.commit_sha }} --no-edit
+          git push origin main
