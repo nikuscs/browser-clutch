@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -34,7 +35,7 @@ jobs:
           xcodebuild test \
             -project BrowserClutch.xcodeproj \
             -scheme BrowserClutch \
-            -destination 'platform=macOS'pp
+            -destination 'platform=macOS'
 
       - name: Build
         run: |
