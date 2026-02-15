@@ -9,8 +9,7 @@ concurrency:
   group: release
   cancel-in-progress: false
 
-permissions:
-  contents: write
+permissions: {}
 
 env:
   XCODE_PROJECT: "BrowserClutch.xcodeproj"
@@ -18,10 +17,34 @@ env:
   APP_NAME: "BrowserClutch"
 
 jobs:
-  release:
-    name: Build & Release
+  checks:
+    name: Checks
     runs-on: macos-15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
 
+      - name: Lint
+        run: |
+          brew install swiftlint
+          swiftlint --strict
+
+      - name: Test
+        run: |
+          xcodebuild test \
+            -project BrowserClutch.xcodeproj \
+            -scheme BrowserClutch \
+            -destination 'platform=macOS'
+
+  build-and-release:
+    name: Build, Sign & Release
+    needs: checks
+    runs-on: macos-15
+    environment: release
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -36,7 +59,6 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
-          # Update Info.plist to match tag
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           BUILD=$((MAJOR * 10000 + MINOR * 100 + PATCH))
 
@@ -55,33 +77,38 @@ jobs:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          # Create temporary keychain
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
 
-          # Create keychain
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          # Import certificate
           echo "$APPLE_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/certificate.p12
-          security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security import $RUNNER_TEMP/certificate.p12 \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | tr -d '"')
 
-          # Clean up certificate file
           rm $RUNNER_TEMP/certificate.p12
 
-      - name: Build
+          # Verify identity is available
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Build archive
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           xcodebuild -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -configuration Release \
             -archivePath build/$APP_NAME.xcarchive \
             CODE_SIGN_IDENTITY="$APPLE_SIGNING_IDENTITY" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE="Manual" \
             OTHER_CODE_SIGN_FLAGS="--options=runtime" \
             archive
@@ -103,9 +130,9 @@ jobs:
               <key>signingStyle</key>
               <string>manual</string>
               <key>signingCertificate</key>
-              <string>$APPLE_SIGNING_IDENTITY</string>
+              <string>${APPLE_SIGNING_IDENTITY}</string>
               <key>teamID</key>
-              <string>$APPLE_TEAM_ID</string>
+              <string>${APPLE_TEAM_ID}</string>
           </dict>
           </plist>
           EOF
@@ -121,20 +148,16 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          # Create ZIP for notarization
           ditto -c -k --keepParent "build/$APP_NAME.app" "build/$APP_NAME.zip"
 
-          # Submit for notarization
           xcrun notarytool submit "build/$APP_NAME.zip" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
             --wait
 
-          # Staple the notarization ticket
           xcrun stapler staple "build/$APP_NAME.app"
 
-          # Clean up zip
           rm "build/$APP_NAME.zip"
 
       - name: Create DMG
@@ -145,6 +168,29 @@ jobs:
           hdiutil create -volname "$APP_NAME" \
             -srcfolder build/dmg \
             -ov -format UDZO \
+            "build/$APP_NAME-${{ steps.version.outputs.version }}.dmg"
+
+      - name: Sign DMG
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          codesign --force --sign "$APPLE_SIGNING_IDENTITY" \
+            "build/$APP_NAME-${{ steps.version.outputs.version }}.dmg"
+
+      - name: Notarize DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun notarytool submit \
+            "build/$APP_NAME-${{ steps.version.outputs.version }}.dmg" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          xcrun stapler staple \
             "build/$APP_NAME-${{ steps.version.outputs.version }}.dmg"
 
       - name: Build Changelog
@@ -177,9 +223,7 @@ jobs:
             ## Installation
             1. Download the DMG below
             2. Open it and drag ${{ env.APP_NAME }} to Applications
-            3. Right-click the app → Open (first time only, to bypass Gatekeeper)
-            4. Authorize the app in Settings -> Security & Privacy -> "Browser Clutch ®" -> Open Anyway
-            5. Set as default browser in System Settings → Desktop & Dock
+            3. Set as default browser in System Settings → Desktop & Dock
 
             ${{ steps.changelog.outputs.changelog }}
           files: build/${{ env.APP_NAME }}-${{ steps.version.outputs.version }}.dmg
@@ -198,3 +242,28 @@ jobs:
         if: always()
         run: |
           security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+
+  cleanup:
+    name: Cleanup on failure
+    needs: [checks, build-and-release]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete partial release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME}"
+
+          # Delete the release if it was partially created
+          RELEASE_ID=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG_NAME" --jq '.id' 2>/dev/null || echo "")
+          if [ -n "$RELEASE_ID" ]; then
+            echo "Deleting partial release $RELEASE_ID"
+            gh api -X DELETE "repos/${{ github.repository }}/releases/$RELEASE_ID" || true
+          fi
+
+          # Delete the tag so the user can fix and re-tag
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/$TAG_NAME" || true
+          echo "Cleaned up tag $TAG_NAME — fix the issue and re-tag to retry"
