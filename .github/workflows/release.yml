@@ -50,16 +50,46 @@ jobs:
           echo "tag=$PREV_TAG" >> $GITHUB_OUTPUT
           echo "Previous tag: $PREV_TAG"
 
+      - name: Import Apple certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          # Create keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          echo "$APPLE_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          # Clean up certificate file
+          rm $RUNNER_TEMP/certificate.p12
+
       - name: Build
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           xcodebuild -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -configuration Release \
             -archivePath build/$APP_NAME.xcarchive \
-            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGN_IDENTITY="$APPLE_SIGNING_IDENTITY" \
+            CODE_SIGN_STYLE="Manual" \
+            OTHER_CODE_SIGN_FLAGS="--options=runtime" \
             archive
 
       - name: Export app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           cat > ExportOptions.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -69,7 +99,13 @@ jobs:
               <key>destination</key>
               <string>export</string>
               <key>method</key>
-              <string>mac-application</string>
+              <string>developer-id</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>signingCertificate</key>
+              <string>$APPLE_SIGNING_IDENTITY</string>
+              <key>teamID</key>
+              <string>$APPLE_TEAM_ID</string>
           </dict>
           </plist>
           EOF
@@ -78,6 +114,28 @@ jobs:
             -archivePath build/$APP_NAME.xcarchive \
             -exportPath build \
             -exportOptionsPlist ExportOptions.plist
+
+      - name: Notarize app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Create ZIP for notarization
+          ditto -c -k --keepParent "build/$APP_NAME.app" "build/$APP_NAME.zip"
+
+          # Submit for notarization
+          xcrun notarytool submit "build/$APP_NAME.zip" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          # Staple the notarization ticket
+          xcrun stapler staple "build/$APP_NAME.app"
+
+          # Clean up zip
+          rm "build/$APP_NAME.zip"
 
       - name: Create DMG
         run: |
@@ -135,3 +193,8 @@ jobs:
           name: ${{ env.APP_NAME }}-${{ steps.version.outputs.version }}
           path: build/${{ env.APP_NAME }}-${{ steps.version.outputs.version }}.dmg
           if-no-files-found: ignore
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
