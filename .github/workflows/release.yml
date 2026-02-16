@@ -232,6 +232,56 @@ jobs:
 
           rm "build/$APP_NAME.zip"
 
+      - name: Create Sparkle update zip
+        run: |
+          ditto -c -k --keepParent "build/$APP_NAME.app" "build/$APP_NAME-${{ steps.version.outputs.version }}.zip"
+
+      - name: Sign update with Sparkle
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          SPARKLE_VERSION="2.8.1"
+          curl -sL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" -o sparkle.tar.xz
+          mkdir -p sparkle-tools
+          tar -xf sparkle.tar.xz -C sparkle-tools bin/sign_update
+          rm sparkle.tar.xz
+
+          ZIP_FILE="build/$APP_NAME-${{ steps.version.outputs.version }}.zip"
+          SIGN_OUTPUT=$(echo "$SPARKLE_ED_PRIVATE_KEY" | ./sparkle-tools/bin/sign_update "$ZIP_FILE")
+
+          ED_SIGNATURE=$(echo "$SIGN_OUTPUT" | grep -o 'sparkle:edSignature="[^"]*"' | cut -d'"' -f2)
+          FILE_LENGTH=$(stat -f%z "$ZIP_FILE")
+
+          echo "ed_signature=$ED_SIGNATURE" >> $GITHUB_OUTPUT
+          echo "file_length=$FILE_LENGTH" >> $GITHUB_OUTPUT
+        id: sparkle_sign
+
+      - name: Generate appcast.xml
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/$APP_NAME-${VERSION}.zip"
+          PUB_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %z")
+
+          cat > "build/appcast.xml" << APPCAST_EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <channel>
+              <title>Browser Clutch Updates</title>
+              <item>
+                <title>Version ${VERSION}</title>
+                <pubDate>${PUB_DATE}</pubDate>
+                <sparkle:version>${VERSION}</sparkle:version>
+                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+                <enclosure url="${DOWNLOAD_URL}"
+                           type="application/octet-stream"
+                           sparkle:edSignature="${{ steps.sparkle_sign.outputs.ed_signature }}"
+                           length="${{ steps.sparkle_sign.outputs.file_length }}" />
+              </item>
+            </channel>
+          </rss>
+          APPCAST_EOF
+
       - name: Create DMG
         run: |
           mkdir -p build/dmg
@@ -298,7 +348,10 @@ jobs:
             3. Set as default browser in System Settings → Desktop & Dock
 
             ${{ steps.changelog.outputs.changelog }}
-          files: build/${{ env.APP_NAME }}-${{ steps.version.outputs.version }}.dmg
+          files: |
+            build/${{ env.APP_NAME }}-${{ steps.version.outputs.version }}.dmg
+            build/${{ env.APP_NAME }}-${{ steps.version.outputs.version }}.zip
+            build/appcast.xml
           draft: false
           prerelease: false
 

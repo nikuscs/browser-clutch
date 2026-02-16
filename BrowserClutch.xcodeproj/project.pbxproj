@@ -22,6 +22,8 @@
 		A1000016 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000016 /* AboutView.swift */; };
 		A1000017 /* RuleRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000017 /* RuleRow.swift */; };
 		FCC9BCD42F242F2D00F36C20 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = FCC9BCD32F242F2D00F36C20 /* AppIcon.icns */; };
+		SP000003 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = SP000002 /* Sparkle */; };
+		SP000011 /* UpdaterViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = SP000010 /* UpdaterViewModel.swift */; };
 		B1000001 /* SourceMatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001 /* SourceMatchTests.swift */; };
 		B1000002 /* DomainMatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000002 /* DomainMatchTests.swift */; };
 		B1000003 /* RuleEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000003 /* RuleEngineTests.swift */; };
@@ -62,6 +64,7 @@
 		B2000003 /* RuleEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleEngineTests.swift; sourceTree = "<group>"; };
 		B2000004 /* RoutingConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingConfigTests.swift; sourceTree = "<group>"; };
 		B3000002 /* BrowserClutchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BrowserClutchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		SP000010 /* UpdaterViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -69,6 +72,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				SP000003 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -118,6 +122,7 @@
 				A2000005 /* RoutingConfig.swift */,
 				A2000006 /* RuleEngine.swift */,
 				A2000007 /* BrowserLauncher.swift */,
+				SP000010 /* UpdaterViewModel.swift */,
 				A2000008 /* Info.plist */,
 				A2000009 /* BrowserClutch.entitlements */,
 				A2000011 /* Assets.xcassets */,
@@ -151,6 +156,9 @@
 			dependencies = (
 			);
 			name = BrowserClutch;
+			packageProductDependencies = (
+				SP000002 /* Sparkle */,
+			);
 			productName = BrowserClutch;
 			productReference = A3000001 /* BrowserClutch.app */;
 			productType = "com.apple.product-type.application";
@@ -196,6 +204,9 @@
 				Base,
 			);
 			mainGroup = A5000001;
+			packageReferences = (
+				SP000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			productRefGroup = A5000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -236,6 +247,7 @@
 				A1000005 /* RoutingConfig.swift in Sources */,
 				A1000006 /* RuleEngine.swift in Sources */,
 				A1000007 /* BrowserLauncher.swift in Sources */,
+				SP000011 /* UpdaterViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -492,6 +504,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		SP000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		SP000002 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = SP000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = AA000001 /* Project object */;
 }

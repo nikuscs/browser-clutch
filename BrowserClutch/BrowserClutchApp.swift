@@ -5,13 +5,14 @@ struct BrowserClutchApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @AppStorage("hideMenuBarIcon") private var hideMenuBarIcon = false
     @Environment(\.openWindow) private var openWindow
+    @StateObject private var updaterViewModel = UpdaterViewModel()
 
     var body: some Scene {
         MenuBarExtra("BrowserClutch", image: "MenuBarIcon", isInserted: Binding(
             get: { !hideMenuBarIcon },
             set: { hideMenuBarIcon = !$0 }
         )) {
-            MenuBarView()
+            MenuBarView(updaterViewModel: updaterViewModel)
         }
         .menuBarExtraStyle(.menu)
 
