@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MenuBarView: View {
+    @ObservedObject var updaterViewModel: UpdaterViewModel
     @Environment(\.openSettings) private var openSettings
     @State private var currentDefault = ConfigManager.shared.load().defaultBrowser
 
@@ -40,6 +41,11 @@ struct MenuBarView: View {
             NSApp.activate(ignoringOtherApps: true)
         }
         .keyboardShortcut(",", modifiers: .command)
+
+        Button("Check for Updates...") {
+            updaterViewModel.checkForUpdates()
+        }
+        .disabled(!updaterViewModel.canCheckForUpdates)
 
         Divider()
 

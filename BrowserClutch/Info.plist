@@ -65,5 +65,9 @@
     <string>NSApplication</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
+    <key>SUFeedURL</key>
+    <string>https://github.com/nikuscs/browser-clutch/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>GLM6ArTlRl6/SmgROEmIbuAmb1bbnJiJL+G8T02/t/w=</string>
 </dict>
 </plist>
