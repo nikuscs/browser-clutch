@@ -243,11 +243,17 @@ jobs:
           SPARKLE_VERSION="2.8.1"
           curl -sL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" -o sparkle.tar.xz
           mkdir -p sparkle-tools
-          tar -xf sparkle.tar.xz -C sparkle-tools bin/sign_update
+          tar -xf sparkle.tar.xz -C sparkle-tools
           rm sparkle.tar.xz
 
+          # Write EdDSA key to temp file (sign_update requires -f flag, not stdin pipe)
+          echo "$SPARKLE_ED_PRIVATE_KEY" > "$RUNNER_TEMP/sparkle_key"
+
           ZIP_FILE="build/$APP_NAME-${{ steps.version.outputs.version }}.zip"
-          SIGN_OUTPUT=$(echo "$SPARKLE_ED_PRIVATE_KEY" | ./sparkle-tools/bin/sign_update "$ZIP_FILE")
+          SIGN_UPDATE=$(find sparkle-tools -name sign_update -type f | head -1)
+          SIGN_OUTPUT=$("$SIGN_UPDATE" "$ZIP_FILE" -f "$RUNNER_TEMP/sparkle_key")
+
+          rm -f "$RUNNER_TEMP/sparkle_key"
 
           ED_SIGNATURE=$(echo "$SIGN_OUTPUT" | grep -o 'sparkle:edSignature="[^"]*"' | cut -d'"' -f2)
           FILE_LENGTH=$(stat -f%z "$ZIP_FILE")
