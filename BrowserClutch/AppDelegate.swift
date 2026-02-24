@@ -14,13 +14,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.bool(forKey: "hideMenuBarIcon")
     }
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        log.info("BrowserClutch launched")
-
+    func applicationWillFinishLaunching(_ notification: Notification) {
         ConfigManager.shared.ensureConfigDirectoryExists()
         reload()
         trackActiveApp()
         registerURLHandler()
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        log.info("BrowserClutch launched")
         observeConfig()
         observeMenuBar()
     }
@@ -104,6 +106,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         route(url)
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            route(url)
+        }
     }
 
     private func route(_ url: URL) {
