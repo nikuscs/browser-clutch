@@ -54,6 +54,7 @@ jobs:
     needs: checks
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: write
     outputs:
@@ -379,6 +380,7 @@ jobs:
     needs: [create-tag, build-and-release]
     if: failure() && needs.create-tag.result == 'success'
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: write
     steps:
