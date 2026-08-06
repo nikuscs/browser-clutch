@@ -30,7 +30,8 @@ enum BrowserDetector {
         ("com.microsoft.edgemac", "Edge"),
         ("company.thebrowser.Browser", "Arc"),
         ("com.operasoftware.Opera", "Opera"),
-        ("com.vivaldi.Vivaldi", "Vivaldi")
+        ("com.vivaldi.Vivaldi", "Vivaldi"),
+        ("ai.perplexity.comet", "Comet")
     ]
 
     private static var cache: (browsers: [BrowserInfo], time: Date)?
