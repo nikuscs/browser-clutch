@@ -35,7 +35,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Lint
         run: |
@@ -62,7 +62,7 @@ jobs:
       tag: ${{ steps.bump.outputs.tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -119,7 +119,7 @@ jobs:
       RELEASE_TAG: ${{ needs.create-tag.outputs.tag || github.ref_name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
